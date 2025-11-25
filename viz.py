@@ -8,7 +8,7 @@ import math
 # --- CONFIGURATION INITIALE ---
 st.set_page_config(page_title="BVMAC Analyst Pro", layout="wide", page_icon="📈")
 
-# --- GESTION DES IMPORTATIONS (SÉCURITÉ IA) ---
+# --- GESTION DES IMPORTATIONS (SÉCURITÉ IA pour le Cloud) ---
 AI_AVAILABLE = False
 SKLEARN_AVAILABLE = False
 
@@ -28,6 +28,7 @@ def load_data(file):
     """Essaie de lire le fichier en priorisant Excel, puis tente divers formats CSV."""
     df = None
     
+    # Tentative 1: Lecture EXCEL (.xlsx)
     if hasattr(file, 'name') and file.name.endswith(('.xlsx', '.xls')):
         try:
             st.info("Tentative de lecture du fichier Excel...")
@@ -35,21 +36,26 @@ def load_data(file):
         except Exception:
             pass
             
+    # Tentative 2: Lecture CSV robuste
     if df is None:
         try:
             st.info("Tentative de lecture du fichier CSV (robuste)...")
+            # Utilise 'engine=python' pour tolérer les lignes incohérentes
             df = pd.read_csv(file, sep=None, engine='python', dayfirst=True)
             if len(df.columns) < 2:
                  df = None
         except Exception:
+            # Tentative 3: CSV standard point-virgule
             try:
                 df = pd.read_csv(file, sep=';', dayfirst=True)
             except Exception:
                  df = None
     
     if df is not None:
+        # Nettoyage
         df.columns = df.columns.str.strip()
         
+        # Gestion des décimales (FCFA utilise la virgule)
         if 'Cours_rfrnc' in df.columns:
             df['Cours_rfrnc'] = df['Cours_rfrnc'].astype(str).str.replace(',', '.', regex=False)
             df['Cours_rfrnc'] = pd.to_numeric(df['Cours_rfrnc'], errors='coerce')
@@ -65,6 +71,7 @@ def load_data(file):
 # --- 2. CALCUL DES INDICATEURS TECHNIQUES (RSI, MACD) ---
 def add_indicators(df):
     
+    # Moyennes Mobiles
     df['SMA_20'] = df['Cours_rfrnc'].rolling(window=20).mean()
     df['SMA_50'] = df['Cours_rfrnc'].rolling(window=50).mean()
     
@@ -121,12 +128,12 @@ def get_forecast(df, days):
 
 # --- 4. INTERFACE UTILISATEUR ET AFFICHAGE ---
 
-# Fichier par défaut
-DEFAULT_FILE = "bvmac_filter.xlsx - Actions.csv" 
+# Le fichier par défaut n'est pas utilisé sur streamlit.io, l'utilisateur doit uploader son fichier.
+st.title("📈 BVMAC Analyst Pro")
 uploaded_file = st.sidebar.file_uploader("📂 Charger votre fichier (CSV ou XLSX)", type=['csv', 'xlsx', 'xls'])
-file_to_load = uploaded_file if uploaded_file else DEFAULT_FILE
 
-df = load_data(file_to_load)
+# Seul le fichier uploadé sera chargé
+df = load_data(uploaded_file)
 
 if df is not None and 'Mnemo' in df.columns and len(df) > 0:
     try:
@@ -150,7 +157,7 @@ if df is not None and 'Mnemo' in df.columns and len(df) > 0:
              # Détermine le nombre de sous-graphiques à afficher
              num_rows = 1 + show_rsi + show_macd
              
-             # Poids des lignes (plus de place pour le prix)
+             # Poids des lignes
              row_heights_list = [0.6]
              if show_rsi:
                  row_heights_list.append(0.2)
@@ -163,22 +170,18 @@ if df is not None and 'Mnemo' in df.columns and len(df) > 0:
                  titles_list.append("RSI (14)")
              if show_macd:
                  titles_list.append("MACD")
-             
-             # --- GRAPHIQUE PRIX / INDICATEURS ---
-             st.subheader(f"Analyse Technique : {choix}")
-             
-             # Vérification pour éviter une erreur si row_heights_list est vide (impossible ici)
-             if not row_heights_list:
-                 row_heights_list = [1.0] 
                  
              fig = make_subplots(rows=num_rows, cols=1, shared_xaxes=True, 
                                  vertical_spacing=0.03, row_heights=row_heights_list,
                                  subplot_titles=titles_list)
              
-             # 1. PRIX
+             # --- GRAPHIQUE PRIX / INDICATEURS ---
+             st.subheader(f"Analyse Technique : {choix}")
+             
+             # 1. PRIX (LISSAGE MONOTONE)
              fig.add_trace(go.Scatter(x=data['Date'], y=data['Cours_rfrnc'], name="Prix", line=dict(color='blue'), line_shape='spline'), row=1, col=1)
              
-             # Bandes de Bollinger
+             # Bandes de Bollinger (LISSAGE MONOTONE)
              if show_bollinger:
                  fig.add_trace(go.Scatter(x=data['Date'], y=data['Upper_Band'], name="Bande Sup.", line=dict(width=1, color='rgba(128,128,128,0.5)'), showlegend=False, line_shape='spline'), row=1, col=1)
                  fig.add_trace(go.Scatter(x=data['Date'], y=data['Lower_Band'], name="Bande Inf.", line=dict(width=1, color='rgba(128,128,128,0.5)'), fill='tonexty', fillcolor='rgba(128,128,128,0.2)', showlegend=False, line_shape='spline'), row=1, col=1)
@@ -187,17 +190,16 @@ if df is not None and 'Mnemo' in df.columns and len(df) > 0:
              if log_scale:
                  fig.update_yaxes(type="log", row=1, col=1)
                  
-             # Pointeur de ligne pour l'ajout des indicateurs
              row_index = 2
              
-             # 2. RSI
+             # 2. RSI (LISSAGE MONOTONE)
              if show_rsi:
                  fig.add_trace(go.Scatter(x=data['Date'], y=data['RSI'], name="RSI", line=dict(color='purple'), line_shape='spline'), row=row_index, col=1)
                  fig.add_hline(y=70, line_dash="dot", line_color="red", row=row_index, col=1)
                  fig.add_hline(y=30, line_dash="dot", line_color="green", row=row_index, col=1)
                  row_index += 1
              
-             # 3. MACD
+             # 3. MACD (LISSAGE MONOTONE)
              if show_macd:
                  fig.add_trace(go.Scatter(x=data['Date'], y=data['MACD'], name="MACD", line=dict(color='black'), line_shape='spline'), row=row_index, col=1)
                  fig.add_trace(go.Scatter(x=data['Date'], y=data['Signal_Line'], name="Signal", line=dict(color='red'), line_shape='spline'), row=row_index, col=1)
@@ -207,7 +209,7 @@ if df is not None and 'Mnemo' in df.columns and len(df) > 0:
              fig.update_layout(height=700, hovermode="x unified", template="plotly_white")
              st.plotly_chart(fig, use_container_width=True)
              
-             # --- PRÉVISIONS (Inchangé) ---
+             # --- PRÉVISIONS ---
              st.markdown("---")
              if st.checkbox("Afficher les prévisions"):
                  days = st.slider("Horizon de prévision (jours)", 30, 180, 90)
@@ -217,11 +219,14 @@ if df is not None and 'Mnemo' in df.columns and len(df) > 0:
                      st.subheader(f"🔮 Projection sur {days} jours")
                      fig_pred = go.Figure()
                      
+                     # Historique (Lissé)
                      fig_pred.add_trace(go.Scatter(x=data['Date'], y=data['Cours_rfrnc'], name="Historique", line_shape='spline'))
                      
+                     # Prévision (Lissée)
                      future_only = forecast_df[forecast_df['ds'] > data['Date'].max()]
                      fig_pred.add_trace(go.Scatter(x=future_only['ds'], y=future_only['yhat'], name="Prévision", line=dict(dash='dash', color='orange'), line_shape='spline'))
                      
+                     # Marge d'erreur (si IA)
                      if method == "AI" and 'yhat_upper' in forecast_df.columns:
                           fig_pred.add_trace(go.Scatter(
                              x=future_only['ds'].tolist() + future_only['ds'].tolist()[::-1],
@@ -229,7 +234,6 @@ if df is not None and 'Mnemo' in df.columns and len(df) > 0:
                              fill='toself', fillcolor='rgba(255,165,0,0.2)', line=dict(width=0), name="Marge d'erreur"
                          ))
                      
-                     # Appliquer l'échelle logarithmique aussi à la prévision
                      if log_scale:
                          fig_pred.update_yaxes(type="log")
                          
@@ -248,7 +252,8 @@ if df is not None and 'Mnemo' in df.columns and len(df) > 0:
 
     except Exception as e:
         st.error(f"Une erreur est survenue lors du traitement : {e}")
-        st.dataframe(df.head())
+        # Optionnel: afficher les premières lignes pour aider l'utilisateur à débugger
+        # st.dataframe(df.head())
 
 else:
-    st.error("⚠️ IMPOSSIBLE DE LIRE LE FICHIER. Veuillez vérifier son format (CSV ou XLSX) et la présence des colonnes 'Date' et 'Cours_rfrnc'.")
+    st.info("Veuillez charger votre fichier de données pour commencer l'analyse.")
