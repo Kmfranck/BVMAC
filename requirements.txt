@@ -1,10 +1,20 @@
-pip
-streamlit
-pandas
-plotly
-numpy
-openpyxl
-# Prophet nécessite une installation spéciale
+# Core dependencies
+streamlit==1.40.1
+pandas==2.2.3
+plotly==5.24.1
+numpy==1.26.4
+openpyxl==3.11.0
+
+# Optional: AI & Machine Learning (Prophet ou Scikit-learn)
+# Décommentez l'une des deux options ci-dessous selon vos besoins
+
+# Option 1: Prophet (IA avancée, recommandé)
 pystan==2.19.1.1
-prophet
-scikit-learn
+prophet==1.1.6
+
+# Option 2: Scikit-learn (régression simple, plus léger)
+scikit-learn==1.5.2
+
+# Development tools (optionnel)
+# black==24.10.0
+# pylint==3.3.1
