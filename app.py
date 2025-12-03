@@ -257,3 +257,4 @@ if df is not None and 'Mnemo' in df.columns and len(df) > 0:
 
 else:
     st.info("Veuillez charger votre fichier de données pour commencer l'analyse.")
+
